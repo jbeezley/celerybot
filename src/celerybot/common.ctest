@@ -1,0 +1,94 @@
+# Variables that should be set:
+#
+#   CTEST_BINARY_DIRECTORY: the build path
+#   CTEST_SOURCE_DIRECTORY: the source path
+#   CTEST_SITE: the host or computer name
+#   CTEST_BUILD_NAME: "..." some unique name to label the build
+#   CTEST_BUILD_FLAGS: "-j4" to build with 4 processes, etc
+#   ctest_configure_options: "-DGUI=OFF;-DLEAN=ON" options to pass to the configuration step
+
+set(ctest_parallel_level "1")
+set(ctest_model "Experimental")
+set(CTEST_TEST_TIMEOUT 180)
+set(CTEST_CMAKE_GENERATOR "Unix Makefiles")
+
+if (ctest_options)
+    # put per machine options in some file if necessary
+    # or provide them as -D VAR="..." on the commandline
+    include("${ctest_options}")
+endif()
+
+ctest_start(${ctest_model})
+
+#==============================================================================
+# Configure
+#==============================================================================
+set(success TRUE)
+ctest_configure(
+    OPTIONS         "${ctest_configure_options}"
+    RETURN_VALUE    configure_result)
+
+ctest_submit(PARTS Configure Notes)
+
+# If configuration failed, report error and stop test.
+if (configure_result)
+    message("Configure failed!")
+    set(success FALSE)
+endif ()
+
+#==============================================================================
+# Build
+#==============================================================================
+# Read ctest custom files from the project.
+set (build_number_errors 0)
+if (success)
+
+    ctest_build(
+        RETURN_VALUE    build_result
+        NUMBER_ERRORS   build_number_errors
+        NUMBER_WARNINGS build_number_warnings
+        APPEND)
+
+    if (COMMAND buildbot_post_build)
+        buildbot_post_build()
+    endif ()
+
+    ctest_submit(PARTS Build)
+
+    # If build failed (or had non-zero errors), report error and stop test.
+    if (build_number_errors OR build_result)
+         message("Build failed with ${build_number_errors} errors and ${build_number_warnings} warnings!")
+         set(success FALSE)
+    endif ()
+    message("BUILD SUMMARY: ${build_number_warnings}/${build_number_errors}")
+endif ()
+
+#==============================================================================
+# Test
+#==============================================================================
+if (success)
+    set(test_args)
+    if (ctest_test_includes)
+        # to explicitly include tests
+        list(APPEND test_args INCLUDE "${ctest_test_includes}")
+    endif ()
+    if (ctest_test_excludes)
+        # to explicitly exclude tests
+        list(APPEND test_args EXCLUDE "${ctest_test_excludes}")
+    endif ()
+
+    if (ctest_parallel_level)
+        list(APPEND test_args PARALLEL_LEVEL "${ctest_parallel_level}")
+    endif ()
+
+    ctest_test(
+        ${test_args}
+        RETURN_VALUE    test_result)
+
+    ctest_submit(PARTS Test)
+
+    if (test_result)
+        message("Tests failed!")
+        set(success FALSE)
+    endif ()
+endif ()
