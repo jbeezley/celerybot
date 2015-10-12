@@ -1,1 +1,5 @@
 *.py[ocd]
+.tox
+.*.sw[a-z]
+dist/
+*.egg-info/
